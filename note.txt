@@ -1,0 +1,311 @@
+=影像分析=
+
+==ch2==
+=== 內插法 ===
+
+fast stone, Image Viewer : Free software
+	* 支援raw檔
+	* full screen
+	* 能讀exif
+	* UI user friendly
+	* Image Comparison 圖片比較
+	* 基本影像處理功能
+		* 截剪、縮放
+		* 調整曲線
+		* 濾波器
+		* 去雜訊
+		
+作業:
+	bilinear 內插法
+	不能用現成函式庫
+	寫成function : myBilinear()
+	未來作業:轉角度，會用到內插法
+			 透視變形(拉四邊形，轉回矩形)
+
+Neighbors
+	* 4-neighbors : 上下左右
+	* Diagonal-neighbors : 四個斜角
+	* 8-neighbors : 上面兩組相加
+
+Basic Relationships  **會考**
+	* Adjacency (鄰接)
+		* 4-adj : p,q 互為對方的 4-neighbors
+		* 8-adj : q 是 p 的8-neighbors
+		* m-adj : q 是 p 4-neighbors 或 q是 p的 對角鄰但不為4-Neighbors
+	* PATH
+	* Regions:
+	* Boundary:
+		* inner border : 本身為1，8-neighbors 至少有一個0
+		* outter border : 本身為0，8-neighbors 至少有一個1
+		
+Histogram Processing *** : 必考
+	* 不受螢幕顯示影響
+Histogram Equalization:
+	* 將數據長條圖打平
+	* 結果會將原本過亮或過暗的圖對比調整適中
+	* 算法: 令其輸出一致 (1/L-1)
+		* 要是cdf (單調遞增)
+		* 計數相同rk 的pixel 數量
+		* 得到出現機率 = 數量/total
+		* 此時畫機率的pdf = Histogram
+		* 累計機率得到cdf => 放大 y 軸為 k倍
+		* 如果 k = 7，r0 = 0.19, 則 r0' = 0.19*7 ~= 1.4
+		* 得到transformation function
+		* 因為亮度無小數點，所以output再做四捨五入
+			* 0 => round(1.4) = 1
+			* 1 => round(2.8) = 3
+			* 2 => round(4.2) = 4
+		* 再做一次 cdf
+			* p(0) = 0 (因為沒有點對應到0)
+			* p(1) = 0.19 (r0 => 1，p0 = 0.19)
+			* p(2) = 0 (一樣沒有對應的)
+			* p(3) = 0.25 
+		* 第二次的cdf 就是輸出圖的 Histogram
+	* 但有兩個問題
+		* 一、公式是希望輸出的機率是一致的(1/L-1)，但結果沒有
+		* 二、有些亮度的機率變成0
+		* 原因是因為過程中被四捨五入掉了
+Local Histogram Processing: 
+	* 局部性的
+	* 有些影像做 Histogram 會無法得到好的局部細節，用全局的容易過曝或是增強一些不必要的noise
+	* 局部的做法，是一次只取部分出來做 Histogram，例如 3x3
+	* 但是有可能造成兩個局部的邊界出現明顯斷點
+	* 若是兩個局部只偏移 1 個 pixel可以解決這個問題，但是會多花許多時間
+	
+
+	
+Fundamentals of Spatial Filtering:
+	* Convolution
+		在 spatial 做 convolution = 在另一空間做 filter
+	* Median filter:
+		* 很類似convolution，但實際上在 另一空間是沒有對應的
+		* 因為非線性
+		* 但是能降噪
+		* 將 3*3 grid內pixel排序，取中間值
+		
+Smoothing Spatial Filters:
+	* 平均(低通濾波器): 對 grid 內pixel 通通乘於 1/n再加總，得到結果。想越模糊，grid設越大即可
+		* 高斯filter (靠近中間的佔比較高) : 比例都是 2^N 次
+	* 如果圖片有高斯雜訊，可以用平均filter去除。但是有缺點 : 邊緣會被砍掉
+
+Nonlinear Filter:
+	Median Filters:
+		排序後輸出中位數
+	max/min filter : 沒在用xd
+
+Sharpening Spatial Filters:
+	* 令f(x) 為 某一row的值
+	* 一階微分跟二階微分的結果，通常會用絕對值處理
+	* 經過二階微分之後得到的值，在細節(點、線)上的值會被放大(增強)
+	* 一階微分之後，容易找到邊緣( 00700，7是差異值即為邊)
+	
+	* 進階: 由二階微分找回邊緣。 => 如果值有穿越0( zero-crossing )，便是邊緣
+	* 補充: 如果用二階微分找edge，找的邊緣可以比一階精準(到1px)，但是比較麻煩。一階找出來的可能比較寬
+		- 缺點: 
+			- 容易受到雜訊影響
+			- 要做 zero-crossing，需要多一次處理
+	* 實務上圖片會有二維，所以會對 x, y 做微分
+		- Laplacian : f''(x) + f''(y)
+		- grad : 一階微分
+	* 而edge是有方向性的，其應為一向量
+	* 把二階微分轉換到mask，則為 [ 0,1,0,1,-4,1,0,1,0]，或是乘負號也可
+		* 結果會是平坦處為0 ，細節加強
+	
+
+= ch5 image restoration and reconstruction=
+估算影像好壞，再還原。要先研究破壞的成因
+
+- f(x, y) 是原圖(好的)
+- g(x, y) 是受到破壞過的圖片
+=> g = f * h + noise ≡ G = H*F + N (在 frequency domain)
+( restoration = deconvolution 在論文內)
+
+如果 h 是線性 且 position-invariant 的才能還原，不是任意破壞都可以
+- linear
+- position-invariant (影片上是time-invarinat，非時變/ 圖片上就是PI，位置不影響破壞): 
+	- def: x(t) -> TI(PI) -> y(t)
+	- then x(t-t0) -> TI -> y(t-t0)
+	- ex: 在t的時候做某件事會得到結果，則在另一個時間做事也要得到相同結果
+	- 在圖片上，則是f(x,y) -> PI(h(x,y)) -> g(x,y) , then f(x',y') -> g(x',y')
+
+雜訊的發生，也不能因位置而有影響(雷同PI)
+
+- 複加式雜訊:
+	- Gaussian
+	- Impulse
+	- 反例: figure5.16: 網格狀雜訊
+		- 有規則性: 整個row 都會有 (跟位置有關)
+		- 在本章節無法處理
+- 可處理的雜訊
+	- 要能用機率來描述
+
+- impluse noise(胡椒雜訊:
+	- 增強式
+	- 要是 uniform 亂數
+	- 1/4 機率會變0 ，1/4 機率會變 255，其餘不變
+	- 較常出現在開關類的
+	- 人眼較容易分辨出來
+- 高斯雜訊
+	- pdf 是 高斯分佈(常態)
+	- 需要 ε 跟 標準差
+	- 一般環境產生的雜訊都是高斯雜訊 (環境中的光熱)
+
+- 其他雜訊要用 Histogram 來分辨，impluse可用人眼
+
+== periodic noise 周期性雜訊 ==
+- 在 spatial domain 下有規則
+- 要轉換成 frequency domain 處理
+
+== estimation of noise parameters ==
+- 看到雜訊，先試試看是不是高斯
+- 如果是，看能不能找出相關參數
+- 如果都找到，便可去除高斯雜訊
+
+== spatial filter (noise)==
+=== mean filter (高斯雜訊) ===
+- 期望值 = 0 => 圖片越多，便越容易找出平均值
+- 用 平均濾波器 可以去除，但是負作用是會模糊
+- 分 算數平均 跟 幾合平均
+	- 幾合的結果好"一點點"
+- 特例: harmonic mean filter (調和平均)
+	- 可用在只有255的 impluse filter，但不能用在有 0 的
+	- 用反的話效果很差，所以其實不太實用
+	
+=== order-statistics filter (impluse noise) ===
+- 0/255(極值)，用排序的 order-statistics filter 便可排除掉
+- 如果又有高斯又有 impluse的話，可用下列
+- midpoint filter
+	- 同時用平均跟排序
+	- 排序後，將極值平均
+	- 在 impluse 上也不太實用
+- alpha-trimmed mean filter
+	- 排序之後，去掉極值，再做平均
+	- 對 高斯+impluse 效果很好
+
+=== adaptive filter ===
+- 雖然 mean filter 可以去掉高斯雜訊，但是會模糊
+- 為了解決這個，可以先判斷 pixel 是落在平坦 or 邊緣上
+- 平坦區 -> 直接去。 邊緣上的話就不要去除
+
+
+=
+== Mathematically modeling ==
+- 大氣 : H(u,v) = e^()
+- 移動 : (曝光時移動) H(u,v) = T/π(ua+...) => 要估計 T 曝光時間
+
+== inverse Filter **期末==
+- 沒有雜訊時可用
+- F' = G/H = F + N/H
+- 在高頻常常是0，導致一有雜訊就會被放大
+- 一個解法是，在高頻時不處理(限縮範圍)，但等於是通過低通濾波器 => 會糊
+	- 過濾範圍變成要手動抓
+- 題庫 : 寫出公式，並說明缺點以及解決方式(低通濾波器)
+
+== Wiener Filter ==
+- 目的 : 最小化 平方平均誤差
+- 限制 : 誤差總合為 0 
+	- 因為通常誤差是高斯誤差，所以 ok
+- def : 
+	- Sn = |N(u,v)| ^2 : 雜訊平方
+	- Sf = |F(u,v)| ^2 : 結果平方
+
+- Sf 無法估計，Sn 難度很高，所以會假設 Sn/Sf = K，k為常數
+	- 缺點 : 假設過於簡單，理論上不可能
+	- 缺點2 : k 要人為調整
+- 但是即使使用簡化估計 K 值，依然可得到效果很好的結果(只是要多做幾次挑選)
+- 補充 如何找出k值: (用在作業)
+	- 因為有原圖，所以將所有參數的結果做誤差平均，選最好的
+
+== Constrained Least Squares Filter ==
+- 想解決 wiener filter 的k值問題，可批次處理
+- def :
+	- * 是共軛複數 : (2+3j)* = 2-3j
+	- H x H* = |H|^2
+- 要找 r
+	- 類似梯次法
+
+	
+= ch10 Image Segmentation =
+影像切割 : 切出感興趣的部位
+學理不難，但問題在於難以有通用的參數以及方法
+
+兩大類方法
+1: 不連續性
+	- 亮度性 (intensitive) 差異大
+	- 用二階微分可找到
+2: 相似性
+	- 影像中有許多類似物體
+	- 同群的 intensitive 類似，用分群的方法做
+	- 彈性比不連續性高
+
+找edge : 一階微分
+找細節 : 二階微分
+	
+== segmentation (1)==
+- 用 convolution mask 找出來，設定一個 camp ，高於其值便認定不連續
+== line detection ==
+- 用 sobel filter 可做，但有另一種 mask (figure 10.6)
+	- 可找得更精準，並可做 45度角的線
+- 用一階微分找
+	- edge會比較寬
+	- 在有雜訊時，比較有寬容值
+- 用二階微分的 zero-crossing 也可找
+	- 可只找到 1 px 的線
+	- 對雜訊的容忍度低，所以比較不鼓勵(也比較麻煩)
+- 可先模糊後再找線，找出主要的線 (細線被去掉)
+- Canny Edge Detector (目前最有名)
+	- 如果想有 線是白 線1px 只找主要線 的特性，可以使用
+	- 非常知名，也改良得差不多了。
+- edge linking **(題目+作業)
+	- 找線出來的結果，線有可能是斷的，可以用edge linking將原本的線接回來
+	- 做法:
+		- 兩點成一直線
+		- 通過某點(x0,y0)的線 is y0 = mx0 + b => b = (-x0)m + y0
+		- 把m跟b當作x,y，找出有最多線相交的某點，便是最多線的
+		- 但是m(斜率)會有無限大的問題，不能直接用
+	- Hough Transform
+		- 為了解決上述斜率無限大的問題
+		- 把 m b 轉換成 p, θ
+			- xcos(θ) + ysin(θ) = p
+		- 以某點(假設是原點)，指向兩點連線的中點
+		- 一樣找出最多線共點的地方
+	- 實作上，計算之後會有非常多共點的地方，很難檢查出來
+		- 所以會將資料分割成 n x n 格，x-axis is -180~180
+		- 分割之後，檢查線是否經過該"格"，有的話就count + 1
+		- 檢查最後的 matrix
+		- 定義一個下限，低於該值的不做共線判斷
+
+///// 
+1/15 6:30 期末考
+/////
+
+== global thresholding (Otsu's Method) ==
+- 可以用演算法找出thresholding最佳的門檻值 (Otsu's Method)
+- Between-class varionce : 同一類別內用一個mean代表，再找出整體class mean。最後看差距
+- Winin-class variance : 在同一類別內的變異數
+- Otsu's Method 是掃過全部之後，找出其值最小的地方
+
+== local thresholding
+
+== region-based segmentaion ==
+- 不是用一、二階微分
+- 用分群的方法做
+=== Greyscale ===
+- 做出來的model，通常用顏色分塊
+- 看靠近的像素(連續性)，但是有誤判空間
+=== Base on Teture ===
+- 靠相似度分群
+=== Base on Motion ===
+- 影片內找出 motion vector，將相同(相似)的部份列為同一區
+=== Base on Depth ===
+- 靠深度判斷(要有深度資訊)
+
+== Region Growing (seed growing)==
+- 在影像上隨機灑點(seed)
+- 從seed向外長，將相似的列為同一群
+	- 重覆增加範圍，直到兩群碰撞，如果兩群相似(texture or color or depth)，則合併，反之就是兩群
+- 要決定相似性的指標多少。決定兩群要不要merge
+	- 有時候相似度不像，但是面積差異太大，也可以考慮合併
+	
+== Watershed 分水離法 ** ==
+- 
